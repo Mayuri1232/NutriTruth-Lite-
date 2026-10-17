@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ app_name }} – Food Label Scanner</title>
+  <link href="/static/vendor/bootstrap.min.css" rel="stylesheet">
+  <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+
+<header class="hero text-center text-white py-5">
+  <div class="container">
+    <h1 class="display-5 fw-bold">🥗 {{ app_name }}</h1>
+    <p class="lead mb-3">Scan any food label. Get traffic lights, a Nutri-Score and an additive safety check in seconds.</p>
+    <span class="badge tech-badge">FastAPI</span>
+    <span class="badge tech-badge">OpenCV</span>
+    <span class="badge tech-badge">Tesseract OCR</span>
+    <span class="badge tech-badge">Bootstrap 5</span>
+    <span class="badge tech-badge">FSSAI · FDA · FSA</span>
+  </div>
+</header>
+
+<main class="container my-4">
+  <div id="errorAlert" class="alert alert-danger alert-dismissible d-none" role="alert">
+    <span id="errorText"></span>
+    <button type="button" class="btn-close" id="errorClose" aria-label="Close"></button>
+  </div>
+
+  <div class="row g-4">
+    <!-- ============ LEFT: inputs ============ -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <h5 class="card-title mb-3">1 · Add a label</h5>
+
+          <label for="productName" class="form-label">Product name</label>
+          <input type="text" id="productName" class="form-control mb-3" placeholder="e.g. Masala Chips 52g" maxlength="80">
+
+          <div id="dropZone" class="drop-zone text-center">
+            <div class="display-6">📷</div>
+            <p class="mb-2 fw-semibold">Drag &amp; drop a label photo here</p>
+            <p class="text-muted small mb-3">or choose one from your gallery / camera</p>
+            <button type="button" id="browseBtn" class="btn btn-success me-1">Browse Gallery</button>
+            <button type="button" id="sampleBtn" class="btn btn-outline-success">Try Sample Label</button>
+            <input type="file" id="fileInput" accept="image/*" capture="environment" class="d-none">
+          </div>
+
+          <div id="previewContainer" class="preview-box d-none">
+            <img id="previewImage" alt="Label preview">
+            <div id="laserScanner" class="laser d-none"></div>
+            <button type="button" id="clearBtn" class="btn btn-sm btn-light preview-clear">✕ Clear / Remove</button>
+          </div>
+
+          <button type="button" id="scanBtn" class="btn btn-success btn-lg w-100 mt-3" disabled>
+            <span id="scanSpinner" class="spinner-border spinner-border-sm d-none me-2" role="status"></span>
+            <span id="scanLabel">Scan Label</span>
+          </button>
+          <p class="text-muted small mt-2 mb-0">Tip: photograph the nutrition table flat, in good light, filling the frame.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT: results ============ -->
+    <div class="col-lg-7">
+      <div id="welcomePlaceholder" class="card border-0 shadow-sm h-100">
+        <div class="card-body text-center text-muted d-flex flex-column justify-content-center py-5">
+          <div class="display-3">🍎</div>
+          <h5 class="mt-3">Your assessment will appear here</h5>
+          <p class="mb-0">Upload a label or tap <strong>Try Sample Label</strong> to see a full demo.</p>
+        </div>
+      </div>
+
+      <div id="resultCard" class="d-none">
+        <div class="card shadow-sm border-0 mb-3">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <h4 id="resProduct" class="mb-0">Product</h4>
+                <small class="text-muted" id="resMeta"></small>
+              </div>
+              <div class="text-end">
+                <div class="fw-semibold" id="resEnergy">—</div>
+                <small class="text-muted" id="resEnergySub"></small>
+              </div>
+            </div>
+            <div class="mt-3">
+              <div class="small text-uppercase text-muted fw-semibold mb-1">Nutri-Score</div>
+              <div id="nutriBar" class="nutri-bar"></div>
+              <div id="nutriNote" class="small text-muted mt-1"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="lightGrid" class="row g-3 mb-3"></div>
+
+        <div class="card shadow-sm border-0 mb-3">
+          <div class="card-body">
+            <h6 class="card-title">🧪 Additives &amp; preservatives</h6>
+            <div id="additiveList"></div>
+          </div>
+        </div>
+
+        <div class="accordion mb-3" id="rawAccordion">
+          <div class="accordion-item border-0 shadow-sm">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#rawCollapse">Raw extracted OCR text</button>
+            </h2>
+            <div id="rawCollapse" class="accordion-collapse collapse" data-bs-parent="#rawAccordion">
+              <div class="accordion-body"><pre id="rawText" class="raw-text mb-0"></pre></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+          <button type="button" id="saveBtn" class="btn btn-outline-success">💾 Save to History</button>
+          <button type="button" id="setABtn" class="btn btn-outline-primary">⚖️ Set as Product A</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ COMPARISON ============ -->
+  <section class="mt-5" id="compareSection">
+    <h3 class="mb-3">⚖️ Compare two products <small class="text-muted fs-6">(per 100 g)</small></h3>
+    <div class="card shadow-sm border-0">
+      <div class="card-body">
+        <div class="row g-4">
+          <div class="col-md-6" id="colP1"></div>
+          <div class="col-md-6" id="colP2"></div>
+        </div>
+        <button type="button" id="compareBtn" class="btn btn-success mt-3">Compare</button>
+
+        <div id="compareResult" class="mt-4 d-none">
+          <div class="table-responsive">
+            <table class="table align-middle text-center">
+              <thead><tr><th class="text-start">Metric</th><th id="thP1">Product A</th><th id="thP2">Product B</th><th>Healthier</th></tr></thead>
+              <tbody id="compareBody"></tbody>
+            </table>
+          </div>
+          <div id="compareVerdict" class="alert alert-success mb-0"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HISTORY ============ -->
+  <section class="mt-5 mb-5" id="historySection">
+    <h3 class="mb-3">🕘 Recent scans <small class="text-muted fs-6">(last 5, stored in this browser)</small></h3>
+    <div id="historyList" class="list-group shadow-sm"></div>
+  </section>
+</main>
+
+<footer class="text-center text-muted small py-4 border-top">
+  {{ app_name }} is an educational tool, not medical advice. OCR can misread labels – always double-check values.
+</footer>
+
+<script src="/static/vendor/bootstrap.bundle.min.js"></script>
+<script type="module" src="/static/js/main.js"></script>
+</body>
+</html>
